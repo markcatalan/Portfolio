@@ -99,16 +99,80 @@ navlinks.querySelectorAll("a").forEach((a) =>
   }
 })();
 
+// Work filter (animated with GSAP Flip when available)
 const filters = document.querySelectorAll(".filter");
-const cards = document.querySelectorAll("#workGrid .card");
+const workGrid = document.getElementById("workGrid");
+const cards = workGrid.querySelectorAll(".card");
+const canFlip =
+  window.gsap &&
+  window.Flip &&
+  matchMedia("(prefers-reduced-motion: no-preference)").matches;
+if (canFlip) gsap.registerPlugin(Flip);
+let filterFlip;
+
 filters.forEach((btn) => {
   btn.addEventListener("click", () => {
+    if (btn.classList.contains("active")) return;
     filters.forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     const f = btn.dataset.filter;
-    cards.forEach((c) => {
-      c.style.display = f === "all" || c.dataset.cat === f ? "" : "none";
+    const applyFilter = () =>
+      cards.forEach((c) => {
+        c.style.display = f === "all" || c.dataset.cat === f ? "" : "none";
+      });
+
+    if (!canFlip) return applyFilter();
+
+    // Rapid clicks: finish the previous animation so no card is left half-faded
+    if (filterFlip) filterFlip.progress(1);
+    gsap.getTweensOf([workGrid, ...cards]).forEach((t) => t.progress(1));
+
+    const state = Flip.getState(cards);
+    const startHeight = workGrid.offsetHeight;
+    applyFilter();
+    const endHeight = workGrid.offsetHeight;
+
+    // Flip measures the final layout now, before the height tween touches the grid
+    filterFlip = Flip.from(state, {
+      duration: 0.6,
+      ease: "power3.inOut",
+      stagger: 0.03,
+      absoluteOnLeave: true,
+      onEnter: (els) =>
+        gsap.fromTo(
+          els,
+          { autoAlpha: 0, scale: 0.94 },
+          {
+            autoAlpha: 1,
+            scale: 1,
+            duration: 0.5,
+            delay: 0.2,
+            stagger: 0.05,
+            ease: "power2.out",
+            overwrite: "auto",
+          },
+        ),
+      onLeave: (els) =>
+        gsap.to(els, {
+          autoAlpha: 0,
+          scale: 0.94,
+          duration: 0.35,
+          ease: "power2.in",
+          overwrite: "auto",
+        }),
     });
+
+    // Ease the grid height so the sections below don't jump
+    gsap.fromTo(
+      workGrid,
+      { height: startHeight },
+      {
+        height: endHeight,
+        duration: 0.6,
+        ease: "power3.inOut",
+        clearProps: "height",
+      },
+    );
   });
 });
 
