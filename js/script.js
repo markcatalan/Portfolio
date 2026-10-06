@@ -11,13 +11,18 @@ navlinks.querySelectorAll("a").forEach((a) =>
   }),
 );
 
+// Resolves when the hero intro is nearly done (right away if it doesn't run),
+// so animations just below the hero wait their turn instead of competing
+let heroIntroDone;
+const heroIntro = new Promise((r) => (heroIntroDone = r));
+
 // Hero entrance (GSAP + SplitText)
 (function () {
   const root = document.documentElement;
-  if (!root.classList.contains("hero-anim")) return; // reduced motion
+  if (!root.classList.contains("hero-anim")) return heroIntroDone(); // reduced motion
   if (!window.gsap || !window.SplitText) {
     root.classList.remove("hero-anim"); // CDN failed: just show everything
-    return;
+    return heroIntroDone();
   }
   gsap.registerPlugin(SplitText);
 
@@ -69,7 +74,8 @@ navlinks.querySelectorAll("a").forEach((a) =>
         },
         0.25,
       )
-      .from(".hero-media-cap", { y: 10, autoAlpha: 0, duration: 0.5 }, "-=0.4");
+      .from(".hero-media-cap", { y: 10, autoAlpha: 0, duration: 0.5 }, "-=0.4")
+      .call(heroIntroDone, null, "-=0.6");
   });
 
   // Subtle mouse parallax on the stacked windows (desktop pointers only)
@@ -97,6 +103,38 @@ navlinks.querySelectorAll("a").forEach((a) =>
       }),
     );
   }
+})();
+
+// Pipeline strip: 01 → 02 → 03 slide in from the left, one after another
+(function () {
+  const row = document.querySelector(".pipeline-row");
+  // hero-anim is only kept when motion is allowed and GSAP loaded
+  const canAnimate =
+    row &&
+    document.documentElement.classList.contains("hero-anim") &&
+    "IntersectionObserver" in window;
+  if (!canAnimate) {
+    document.documentElement.classList.add("pipeline-static");
+    return;
+  }
+
+  const items = row.querySelectorAll(".pipeline-item");
+  const tl = gsap.timeline({ paused: true, defaults: { ease: "power3.out" } });
+  items.forEach((item, i) => {
+    const at = i * 0.18;
+    tl.from(item.querySelector(".num"), { y: 10, autoAlpha: 0, duration: 0.5 }, at)
+      .from(item.querySelector("p"), { x: -24, autoAlpha: 0, duration: 0.7 }, at + 0.08);
+  });
+
+  const io = new IntersectionObserver(
+    (entries) => {
+      if (!entries[0].isIntersecting) return;
+      io.disconnect();
+      heroIntro.then(() => tl.play());
+    },
+    { threshold: 0.3 },
+  );
+  io.observe(row);
 })();
 
 // Work filter (animated with GSAP Flip when available)

@@ -457,6 +457,11 @@ nav {
   line-height: 1.35;
   color: var(--ink);
 }
+/* Hidden until the GSAP stagger runs (see script.js) */
+.hero-anim:not(.pipeline-static) .pipeline-item .num,
+.hero-anim:not(.pipeline-static) .pipeline-item p {
+  visibility: hidden;
+}
 @media (max-width: 760px) {
   .pipeline-row {
     grid-template-columns: 1fr;
