@@ -331,6 +331,68 @@ if ("IntersectionObserver" in window) {
   io.observe(row);
 })();
 
+// Pricing: prices count up from $0 and the "Most popular" badge pops in
+(function () {
+  const priceEls = [...document.querySelectorAll(".hourly-price, .tier-price")];
+  const canAnimate =
+    priceEls.length &&
+    window.gsap &&
+    "IntersectionObserver" in window &&
+    matchMedia("(prefers-reduced-motion: no-preference)").matches;
+  if (!canAnimate) return;
+
+  // "$25<span>/ project</span>": wrap the "$25" text node so it can be counted
+  const prices = priceEls.map((el) => {
+    const textNode = el.firstChild;
+    const num = document.createElement("span");
+    num.className = "price-num";
+    const finalText = textNode.textContent.trim();
+    textNode.replaceWith(num);
+    num.textContent = "$0";
+    const target = parseInt(finalText.replace(/\D/g, ""), 10);
+    return { el, num, target, finalText };
+  });
+
+  const badge = document.querySelector(".tier-badge");
+  if (badge) gsap.set(badge, { autoAlpha: 0, scale: 0.4 });
+
+  const io = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        io.unobserve(entry.target);
+        const { num, target, finalText } = prices.find(
+          (p) => p.el === entry.target,
+        );
+        // Reserve the final width (measured now, after fonts have loaded)
+        // so the "/ project" label doesn't shift while the digits grow
+        num.textContent = finalText;
+        num.style.minWidth = num.offsetWidth + "px";
+        num.textContent = "$0";
+        const count = { v: 0 };
+        gsap.to(count, {
+          v: target,
+          duration: 1.2,
+          delay: 0.2, // let the card's fade-in start first
+          ease: "power2.out",
+          onUpdate: () => (num.textContent = "$" + Math.round(count.v)),
+        });
+        if (badge && entry.target.closest(".tier") === badge.closest(".tier")) {
+          gsap.to(badge, {
+            autoAlpha: 1,
+            scale: 1,
+            duration: 0.5,
+            delay: 0.6,
+            ease: "back.out(2)",
+          });
+        }
+      });
+    },
+    { threshold: 0.6 },
+  );
+  prices.forEach((p) => io.observe(p.el));
+})();
+
 // ---------- Lightboxes ----------
 const lbMotion =
   window.gsap && matchMedia("(prefers-reduced-motion: no-preference)").matches;

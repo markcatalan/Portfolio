@@ -666,7 +666,7 @@ section {
   color: var(--sage-deep);
   white-space: nowrap;
 }
-.hourly-price span {
+.hourly-price span:not(.price-num) {
   font-size: 1rem;
   color: var(--ink-soft);
   font-family: var(--sans);
@@ -750,7 +750,11 @@ section {
   font-size: 1.9rem;
   margin-bottom: 6px;
 }
-.tier-price span {
+.price-num {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+}
+.tier-price span:not(.price-num) {
   font-size: 0.9rem;
   color: var(--ink-soft);
   font-family: var(--sans);
