@@ -194,6 +194,55 @@ if ("IntersectionObserver" in window) {
   revealEls.forEach((el) => el.classList.add("in"));
 }
 
+// Skill bars: fill from 0 and count up the percentage when scrolled into view
+(function () {
+  const cols = [...document.querySelectorAll(".stack-col")];
+  const canAnimate =
+    window.gsap &&
+    "IntersectionObserver" in window &&
+    matchMedia("(prefers-reduced-motion: no-preference)").matches;
+  if (!canAnimate || !cols.length) return;
+
+  // Store each bar's target width and percentage, then reset to 0
+  const rowsByCol = cols.map((col) =>
+    [...col.querySelectorAll(".skill-row")].map((row) => {
+      const bar = row.querySelector(".skill-bar i");
+      const label = row.querySelector(".skill-row-top span:last-child");
+      const target = parseFloat(bar.style.width);
+      gsap.set(bar, { width: 0 });
+      label.textContent = "0%";
+      return { bar, label, target };
+    }),
+  );
+
+  const io = new IntersectionObserver(
+    (entries) => {
+      // k = order among columns entering together (desktop: all 3 at once)
+      const visible = entries.filter((entry) => entry.isIntersecting);
+      visible.forEach((entry, k) => {
+        io.unobserve(entry.target);
+        const rows = rowsByCol[cols.indexOf(entry.target)];
+        rows.forEach(({ bar, label, target }, i) => {
+          const count = { v: 0 };
+          const vars = {
+            duration: 1.2,
+            ease: "power3.out",
+            delay: 0.25 + k * 0.15 + i * 0.12,
+          };
+          gsap.to(bar, { ...vars, width: target + "%" });
+          gsap.to(count, {
+            ...vars,
+            v: target,
+            onUpdate: () => (label.textContent = Math.round(count.v) + "%"),
+          });
+        });
+      });
+    },
+    { threshold: 0.35 },
+  );
+  cols.forEach((col) => io.observe(col));
+})();
+
 // Food menu lightbox
 (function () {
   const lightbox = document.getElementById("foodMenuLightbox");
