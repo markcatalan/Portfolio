@@ -1,2 +1,2 @@
 # Ignore temporary zip files
-*zip
+*.zip
