@@ -148,11 +148,55 @@ const canFlip =
 if (canFlip) gsap.registerPlugin(Flip);
 let filterFlip;
 
+// Work cards rise in one after another as they scroll into view
+let revealAllCards = () => {};
+(function () {
+  const canAnimate =
+    window.gsap &&
+    "IntersectionObserver" in window &&
+    matchMedia("(prefers-reduced-motion: no-preference)").matches;
+  if (!canAnimate) return;
+
+  const pending = new Set(cards);
+  const shown = { clearProps: "transform,opacity,visibility" };
+  gsap.set(cards, { autoAlpha: 0, y: 40 });
+
+  const io = new IntersectionObserver(
+    (entries) => {
+      // cards entering together (e.g. a row of two) stagger left to right
+      const visible = entries.filter((e) => e.isIntersecting).map((e) => e.target);
+      if (!visible.length) return;
+      visible.forEach((card) => {
+        io.unobserve(card);
+        pending.delete(card);
+      });
+      gsap.to(visible, {
+        ...shown,
+        autoAlpha: 1,
+        y: 0,
+        duration: 0.8,
+        stagger: 0.12,
+        ease: "power3.out",
+      });
+    },
+    { threshold: 0.15 },
+  );
+  cards.forEach((card) => io.observe(card));
+
+  // Filtering moves cards around, so show any not-yet-revealed ones instantly
+  revealAllCards = () => {
+    io.disconnect();
+    if (pending.size) gsap.set([...pending], shown);
+    pending.clear();
+  };
+})();
+
 filters.forEach((btn) => {
   btn.addEventListener("click", () => {
     if (btn.classList.contains("active")) return;
     filters.forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
+    revealAllCards();
     const f = btn.dataset.filter;
     const applyFilter = () =>
       cards.forEach((c) => {
