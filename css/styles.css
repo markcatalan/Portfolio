@@ -311,8 +311,28 @@ nav {
   width: 100%;
   object-fit: cover;
   display: block;
+  filter: saturate(0.92) brightness(0.96);
+  transition:
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.5s ease;
 }
-.hero-layer:hover {
+/* Hover state. With JS (.js-stack), script.js decides which window is
+   "hovered" via .is-active, so the shuffle animation never flickers it. */
+.hero-media:not(.js-stack) .hero-layer:hover img,
+.hero-layer.is-active img {
+  /* slow zoom + brighten as the window comes to the front */
+  transform: scale(1.07);
+  filter: saturate(1.05) brightness(1.03);
+}
+.hero-bar-label {
+  transition: color 0.3s ease;
+}
+.hero-media:not(.js-stack) .hero-layer:hover .hero-bar-label,
+.hero-layer.is-active .hero-bar-label {
+  color: var(--sage-deep);
+}
+.hero-media:not(.js-stack) .hero-layer:hover,
+.hero-layer.is-active {
   translate: 0 -8px;
   z-index: 5;
   box-shadow: 0 28px 50px -14px rgba(20, 19, 15, 0.55);
@@ -1206,7 +1226,8 @@ footer {
     transform: none;
     transition: none;
   }
-  .tier:hover {
+  .tier:hover,
+  .hero-layer:hover img {
     transform: none;
   }
   .card:hover {

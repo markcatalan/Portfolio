@@ -105,6 +105,91 @@ const heroIntro = new Promise((r) => (heroIntroDone = r));
   }
 })();
 
+// Hero windows: instead of the hovered window instantly popping over the
+// others, the stack briefly fans apart, the layer order changes while
+// nothing overlaps, then everything settles back (same on leave)
+(function () {
+  const media = document.querySelector(".hero-media");
+  const canAnimate =
+    media &&
+    window.gsap &&
+    matchMedia(
+      "(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)",
+    ).matches;
+  if (!canAnimate) return;
+
+  const layers = [...media.querySelectorAll(".hero-layer")];
+  const baseZ = layers.map((l) => Number(getComputedStyle(l).zIndex));
+  // inline z-index from here on, so CSS :hover can't make it jump
+  layers.forEach((l, i) => (l.style.zIndex = baseZ[i]));
+  media.classList.add("js-stack");
+
+  // Only neighbours overlap (Video/Web and Web/Design), by ~19.6% of a
+  // window's height at any size. When a pair's order changes, just that pair
+  // moves apart by 26% (clears the overlap plus the parallax offset); -16% is
+  // the most room there is above "Video". Offsets are yPercent per window.
+  const SPREAD_TOP = [-16, 10, 0]; // Video/Web swap
+  const SPREAD_BOTTOM = [0, -10, 16]; // Web/Design swap
+  const SPREAD_BOTH = [-16, 10, 36]; // both swap (Video <-> Web)
+  let active = null;
+  let tl;
+
+  const zFor = (act) => layers.map((l, i) => (l === act ? 10 : baseZ[i]));
+  const applyZ = (zs) => layers.forEach((l, i) => (l.style.zIndex = zs[i]));
+  // does the pair (i, i+1) end up stacked the other way round?
+  const flips = (from, to, i) => from[i] > from[i + 1] !== to[i] > to[i + 1];
+
+  function setActive(next) {
+    if (next === active) return;
+    if (active) active.classList.remove("is-active");
+    if (next) next.classList.add("is-active");
+    active = next;
+
+    const current = layers.map((l) => Number(l.style.zIndex));
+    const target = zFor(next);
+    const top = flips(current, target, 0);
+    const bottom = flips(current, target, 1);
+    if (tl) tl.kill();
+
+    if (!top && !bottom) {
+      // e.g. "Design" is already on top: no swap, just settle any fan
+      applyZ(target);
+      tl = gsap.to(layers, { yPercent: 0, duration: 0.45, ease: "power3.out" });
+      return;
+    }
+    const spread = top && bottom ? SPREAD_BOTH : top ? SPREAD_TOP : SPREAD_BOTTOM;
+    tl = gsap
+      .timeline()
+      .to(layers, {
+        yPercent: (i) => spread[i],
+        duration: 0.2,
+        ease: "power2.out",
+      })
+      .call(() => applyZ(target))
+      .to(layers, { yPercent: 0, duration: 0.45, ease: "power3.out" });
+  }
+
+  // Hit-test against each window's resting box (offsetLeft/Top ignore
+  // transforms), so a window sliding out from under the cursor keeps its hover
+  const contains = (l, x, y) =>
+    x >= l.offsetLeft &&
+    x <= l.offsetLeft + l.offsetWidth &&
+    y >= l.offsetTop &&
+    y <= l.offsetTop + l.offsetHeight;
+
+  media.addEventListener("pointermove", (e) => {
+    const r = media.getBoundingClientRect();
+    const x = e.clientX - r.left - media.clientLeft;
+    const y = e.clientY - r.top - media.clientTop;
+    if (active && contains(active, x, y)) return; // the front window wins
+    const under = layers
+      .filter((l) => contains(l, x, y))
+      .sort((a, b) => baseZ[layers.indexOf(b)] - baseZ[layers.indexOf(a)]);
+    setActive(under[0] || null);
+  });
+  media.addEventListener("pointerleave", () => setActive(null));
+})();
+
 // Pipeline strip: 01 → 02 → 03 slide in from the left, one after another
 (function () {
   const row = document.querySelector(".pipeline-row");
