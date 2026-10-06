@@ -243,6 +243,56 @@ if ("IntersectionObserver" in window) {
   cols.forEach((col) => io.observe(col));
 })();
 
+// Process: steps appear in sequence, each connector line drawing to the next
+(function () {
+  const row = document.querySelector(".process-row");
+  const canAnimate =
+    row &&
+    window.gsap &&
+    "IntersectionObserver" in window &&
+    matchMedia("(prefers-reduced-motion: no-preference)").matches;
+  if (!canAnimate) return;
+
+  const steps = [...row.querySelectorAll(".process-step")];
+  const tl = gsap.timeline({ paused: true });
+
+  steps.forEach((step, i) => {
+    const num = step.querySelector(".step-num");
+    const text = step.querySelectorAll("h3, p");
+    gsap.set(num, { autoAlpha: 0, scale: 0.5 });
+    gsap.set(text, { autoAlpha: 0, y: 12 });
+    gsap.set(step, { "--line-progress": 0 });
+
+    // each step pops in just before the previous line finishes drawing
+    tl.to(
+      num,
+      { autoAlpha: 1, scale: 1, duration: 0.45, ease: "back.out(1.4)" },
+      i ? "-=0.15" : 0,
+    )
+      .to(
+        text,
+        { autoAlpha: 1, y: 0, duration: 0.5, stagger: 0.08, ease: "power2.out" },
+        "<0.1",
+      )
+      // line draws from this step toward the next one
+      .to(
+        step,
+        { "--line-progress": 1, duration: 0.55, ease: "power2.inOut" },
+        "<0.1",
+      );
+  });
+
+  const io = new IntersectionObserver(
+    (entries) => {
+      if (!entries[0].isIntersecting) return;
+      io.disconnect();
+      tl.play();
+    },
+    { threshold: 0.4 },
+  );
+  io.observe(row);
+})();
+
 // Food menu lightbox
 (function () {
   const lightbox = document.getElementById("foodMenuLightbox");

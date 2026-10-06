@@ -940,6 +940,9 @@ section {
   width: 100%;
   height: 1px;
   background: var(--line);
+  /* --line-progress (0–1) is animated by GSAP to draw the connector */
+  transform: scaleX(var(--line-progress, 1));
+  transform-origin: left center;
 }
 .step-num {
   width: 32px;
