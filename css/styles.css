@@ -1359,7 +1359,8 @@ footer {
     transform: rotate(360deg);
   }
 }
-.lightbox-slide.active {
+.lightbox-slide.active,
+.lightbox-slide.leaving {
   display: flex;
 }
 .lightbox-slide strong {

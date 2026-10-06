@@ -293,15 +293,104 @@ if ("IntersectionObserver" in window) {
   io.observe(row);
 })();
 
-// Food menu lightbox
-(function () {
-  const lightbox = document.getElementById("foodMenuLightbox");
-  const slides = lightbox.querySelectorAll(".lightbox-slide");
-  const dotsWrap = document.getElementById("lightboxDots");
-  const prevBtn = document.getElementById("lightboxPrev");
-  const nextBtn = document.getElementById("lightboxNext");
-  const closeBtn = document.getElementById("lightboxClose");
-  const triggers = document.querySelectorAll('[data-lightbox="food-menu"]');
+// ---------- Lightboxes ----------
+const lbMotion =
+  window.gsap && matchMedia("(prefers-reduced-motion: no-preference)").matches;
+const lbTimelines = new WeakMap();
+// aria-hidden flips immediately, while the .open class stays until the
+// close animation ends, so use this to ask "is it open?"
+const isOpen = (lightbox) => lightbox.getAttribute("aria-hidden") === "false";
+
+// Backdrop fades in, then the stage rises and scales up into place
+function showLightbox(lightbox) {
+  lightbox.classList.add("open");
+  lightbox.setAttribute("aria-hidden", "false");
+  if (!lbMotion) return;
+  const stage = lightbox.querySelector(".lightbox-stage");
+  const closeBtn = lightbox.querySelector(".lightbox-close");
+  if (lbTimelines.has(lightbox)) lbTimelines.get(lightbox).kill();
+  const tl = gsap
+    .timeline()
+    .fromTo(
+      lightbox,
+      { autoAlpha: 0 },
+      { autoAlpha: 1, duration: 0.3, ease: "power2.out" },
+    )
+    .fromTo(
+      stage,
+      { autoAlpha: 0, y: 24, scale: 0.96 },
+      { autoAlpha: 1, y: 0, scale: 1, duration: 0.5, ease: "power3.out" },
+      "<0.05",
+    )
+    .fromTo(
+      closeBtn,
+      { autoAlpha: 0, rotation: -90 },
+      { autoAlpha: 1, rotation: 0, duration: 0.4, ease: "power2.out" },
+      "<0.15",
+    );
+  lbTimelines.set(lightbox, tl);
+}
+
+// Reverse of the above; the lightbox stays displayed until the fade ends
+function hideLightbox(lightbox) {
+  lightbox.setAttribute("aria-hidden", "true");
+  if (!lbMotion) return lightbox.classList.remove("open");
+  const stage = lightbox.querySelector(".lightbox-stage");
+  const closeBtn = lightbox.querySelector(".lightbox-close");
+  if (lbTimelines.has(lightbox)) lbTimelines.get(lightbox).kill();
+  const tl = gsap
+    .timeline({
+      onComplete: () => {
+        lightbox.classList.remove("open");
+        gsap.set([lightbox, stage, closeBtn], {
+          clearProps: "opacity,visibility,transform",
+        });
+      },
+    })
+    .to(stage, {
+      autoAlpha: 0,
+      y: 16,
+      scale: 0.97,
+      duration: 0.25,
+      ease: "power2.in",
+    })
+    .to(lightbox, { autoAlpha: 0, duration: 0.25, ease: "power2.in" }, "<0.05");
+  lbTimelines.set(lightbox, tl);
+}
+
+// Crossfade between slides with a small slide in the direction of travel
+function swapSlides(from, to, dir) {
+  gsap.killTweensOf([from, to]);
+  to.classList.remove("leaving");
+  from.classList.remove("active");
+  from.classList.add("leaving"); // keep it displayed while it fades out
+  to.classList.add("active");
+  gsap.fromTo(
+    to,
+    { autoAlpha: 0, xPercent: 6 * dir },
+    { autoAlpha: 1, xPercent: 0, duration: 0.45, ease: "power3.out" },
+  );
+  gsap.to(from, {
+    autoAlpha: 0,
+    xPercent: -6 * dir,
+    duration: 0.35,
+    ease: "power2.in",
+    onComplete: () => {
+      from.classList.remove("leaving");
+      gsap.set(from, { clearProps: "opacity,visibility,transform" });
+    },
+  });
+}
+
+// Multi-image gallery lightbox with prev/next, dots and arrow keys
+function setupGallery({ lightboxId, dotsId, prevId, nextId, closeId, trigger }) {
+  const lightbox = document.getElementById(lightboxId);
+  const slides = [...lightbox.querySelectorAll(".lightbox-slide")];
+  const dotsWrap = document.getElementById(dotsId);
+  const prevBtn = document.getElementById(prevId);
+  const nextBtn = document.getElementById(nextId);
+  const closeBtn = document.getElementById(closeId);
+  const triggers = document.querySelectorAll(`[data-lightbox="${trigger}"]`);
   let current = 0;
 
   slides.forEach((_, i) => {
@@ -313,20 +402,30 @@ if ("IntersectionObserver" in window) {
   });
   const dots = dotsWrap.querySelectorAll(".lightbox-dot");
 
-  function goTo(i) {
+  function goTo(i, animate = true) {
+    const prev = current;
+    const dir = i > prev ? 1 : -1; // before wrapping, so last→first still moves "next"
     current = (i + slides.length) % slides.length;
-    slides.forEach((s, idx) => s.classList.toggle("active", idx === current));
     dots.forEach((d, idx) => d.classList.toggle("active", idx === current));
+
+    if (lbMotion && animate && current !== prev) {
+      return swapSlides(slides[prev], slides[current], dir);
+    }
+    // Instant switch (opening, or reduced motion): reset any in-flight fades
+    if (lbMotion) {
+      gsap.killTweensOf(slides);
+      gsap.set(slides, { clearProps: "opacity,visibility,transform" });
+    }
+    slides.forEach((s, idx) => {
+      s.classList.remove("leaving");
+      s.classList.toggle("active", idx === current);
+    });
   }
   function open() {
-    lightbox.classList.add("open");
-    lightbox.setAttribute("aria-hidden", "false");
-    goTo(0);
+    goTo(0, false);
+    showLightbox(lightbox);
   }
-  function close() {
-    lightbox.classList.remove("open");
-    lightbox.setAttribute("aria-hidden", "true");
-  }
+  const close = () => hideLightbox(lightbox);
 
   triggers.forEach((t) =>
     t.addEventListener("click", (e) => {
@@ -341,142 +440,49 @@ if ("IntersectionObserver" in window) {
     if (e.target === lightbox) close();
   });
   document.addEventListener("keydown", (e) => {
-    if (!lightbox.classList.contains("open")) return;
+    if (!isOpen(lightbox)) return;
     if (e.key === "Escape") close();
     if (e.key === "ArrowLeft") goTo(current - 1);
     if (e.key === "ArrowRight") goTo(current + 1);
   });
-})();
+}
 
-// Brand logo lightbox
-(function () {
-  const lightbox = document.getElementById("logoLightbox");
-  const slides = lightbox.querySelectorAll(".lightbox-slide");
-  const dotsWrap = document.getElementById("logoLightboxDots");
-  const prevBtn = document.getElementById("logoLightboxPrev");
-  const nextBtn = document.getElementById("logoLightboxNext");
-  const closeBtn = document.getElementById("logoLightboxClose");
-  const triggers = document.querySelectorAll('[data-lightbox="brand-logo"]');
-  let current = 0;
-
-  slides.forEach((_, i) => {
-    const dot = document.createElement("button");
-    dot.className = "lightbox-dot" + (i === 0 ? " active" : "");
-    dot.setAttribute("aria-label", "Go to image " + (i + 1));
-    dot.addEventListener("click", () => goTo(i));
-    dotsWrap.appendChild(dot);
-  });
-  const dots = dotsWrap.querySelectorAll(".lightbox-dot");
-
-  function goTo(i) {
-    current = (i + slides.length) % slides.length;
-    slides.forEach((s, idx) => s.classList.toggle("active", idx === current));
-    dots.forEach((d, idx) => d.classList.toggle("active", idx === current));
-  }
-  function open() {
-    lightbox.classList.add("open");
-    lightbox.setAttribute("aria-hidden", "false");
-    goTo(0);
-  }
-  function close() {
-    lightbox.classList.remove("open");
-    lightbox.setAttribute("aria-hidden", "true");
-  }
-
-  triggers.forEach((t) =>
-    t.addEventListener("click", (e) => {
-      e.preventDefault();
-      open();
-    }),
-  );
-  prevBtn.addEventListener("click", () => goTo(current - 1));
-  nextBtn.addEventListener("click", () => goTo(current + 1));
-  closeBtn.addEventListener("click", close);
-  lightbox.addEventListener("click", (e) => {
-    if (e.target === lightbox) close();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (!lightbox.classList.contains("open")) return;
-    if (e.key === "Escape") close();
-    if (e.key === "ArrowLeft") goTo(current - 1);
-    if (e.key === "ArrowRight") goTo(current + 1);
-  });
-})();
-
-// Static ads lightbox
-(function () {
-  const lightbox = document.getElementById("staticAdsLightbox");
-  const slides = lightbox.querySelectorAll(".lightbox-slide");
-  const dotsWrap = document.getElementById("staticAdsLightboxDots");
-  const prevBtn = document.getElementById("staticAdsLightboxPrev");
-  const nextBtn = document.getElementById("staticAdsLightboxNext");
-  const closeBtn = document.getElementById("staticAdsLightboxClose");
-  const triggers = document.querySelectorAll('[data-lightbox="static-ads"]');
-  let current = 0;
-
-  slides.forEach((_, i) => {
-    const dot = document.createElement("button");
-    dot.className = "lightbox-dot" + (i === 0 ? " active" : "");
-    dot.setAttribute("aria-label", "Go to image " + (i + 1));
-    dot.addEventListener("click", () => goTo(i));
-    dotsWrap.appendChild(dot);
-  });
-  const dots = dotsWrap.querySelectorAll(".lightbox-dot");
-
-  function goTo(i) {
-    current = (i + slides.length) % slides.length;
-    slides.forEach((s, idx) => s.classList.toggle("active", idx === current));
-    dots.forEach((d, idx) => d.classList.toggle("active", idx === current));
-  }
-  function open() {
-    lightbox.classList.add("open");
-    lightbox.setAttribute("aria-hidden", "false");
-    goTo(0);
-  }
-  function close() {
-    lightbox.classList.remove("open");
-    lightbox.setAttribute("aria-hidden", "true");
-  }
-
-  triggers.forEach((t) =>
-    t.addEventListener("click", (e) => {
-      e.preventDefault();
-      open();
-    }),
-  );
-  prevBtn.addEventListener("click", () => goTo(current - 1));
-  nextBtn.addEventListener("click", () => goTo(current + 1));
-  closeBtn.addEventListener("click", close);
-  lightbox.addEventListener("click", (e) => {
-    if (e.target === lightbox) close();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (!lightbox.classList.contains("open")) return;
-    if (e.key === "Escape") close();
-    if (e.key === "ArrowLeft") goTo(current - 1);
-    if (e.key === "ArrowRight") goTo(current + 1);
-  });
-})();
+setupGallery({
+  lightboxId: "foodMenuLightbox",
+  dotsId: "lightboxDots",
+  prevId: "lightboxPrev",
+  nextId: "lightboxNext",
+  closeId: "lightboxClose",
+  trigger: "food-menu",
+});
+setupGallery({
+  lightboxId: "logoLightbox",
+  dotsId: "logoLightboxDots",
+  prevId: "logoLightboxPrev",
+  nextId: "logoLightboxNext",
+  closeId: "logoLightboxClose",
+  trigger: "brand-logo",
+});
+setupGallery({
+  lightboxId: "staticAdsLightbox",
+  dotsId: "staticAdsLightboxDots",
+  prevId: "staticAdsLightboxPrev",
+  nextId: "staticAdsLightboxNext",
+  closeId: "staticAdsLightboxClose",
+  trigger: "static-ads",
+});
 
 // Vision board lightbox (single image)
 (function () {
   const lightbox = document.getElementById("visionBoardLightbox");
   const closeBtn = document.getElementById("visionBoardLightboxClose");
   const triggers = document.querySelectorAll('[data-lightbox="vision-board"]');
-
-  function open() {
-    lightbox.classList.add("open");
-    lightbox.setAttribute("aria-hidden", "false");
-  }
-  function close() {
-    lightbox.classList.remove("open");
-    lightbox.setAttribute("aria-hidden", "true");
-  }
+  const close = () => hideLightbox(lightbox);
 
   triggers.forEach((t) =>
     t.addEventListener("click", (e) => {
       e.preventDefault();
-      open();
+      showLightbox(lightbox);
     }),
   );
   closeBtn.addEventListener("click", close);
@@ -484,10 +490,11 @@ if ("IntersectionObserver" in window) {
     if (e.target === lightbox) close();
   });
   document.addEventListener("keydown", (e) => {
-    if (!lightbox.classList.contains("open")) return;
+    if (!isOpen(lightbox)) return;
     if (e.key === "Escape") close();
   });
 })();
+
 // Reel video lightbox
 (function () {
   const lightbox = document.getElementById("reelVideoLightbox");
@@ -499,8 +506,7 @@ if ("IntersectionObserver" in window) {
   let loadingTimer = null;
 
   function open() {
-    lightbox.classList.add("open");
-    lightbox.setAttribute("aria-hidden", "false");
+    showLightbox(lightbox);
     loader.classList.add("show");
     video.controls = false; // hide the browser's own loading spinner
     video.load(); // start buffering now (preload="none")
@@ -515,15 +521,14 @@ if ("IntersectionObserver" in window) {
         : video.addEventListener("canplay", r, { once: true }),
     );
     Promise.all([delay, ready]).then(() => {
-      if (!lightbox.classList.contains("open")) return; // closed while loading
+      if (!isOpen(lightbox)) return; // closed (or closing) while loading
       loader.classList.remove("show");
       video.controls = true;
       video.play().catch(() => {});
     });
   }
   function close() {
-    lightbox.classList.remove("open");
-    lightbox.setAttribute("aria-hidden", "true");
+    hideLightbox(lightbox);
     clearTimeout(loadingTimer);
     loader.classList.remove("show");
     video.pause();
@@ -541,7 +546,7 @@ if ("IntersectionObserver" in window) {
     if (e.target === lightbox) close();
   });
   document.addEventListener("keydown", (e) => {
-    if (!lightbox.classList.contains("open")) return;
+    if (!isOpen(lightbox)) return;
     if (e.key === "Escape") close();
   });
 })();
