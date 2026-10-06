@@ -11,6 +11,94 @@ navlinks.querySelectorAll("a").forEach((a) =>
   }),
 );
 
+// Hero entrance (GSAP + SplitText)
+(function () {
+  const root = document.documentElement;
+  if (!root.classList.contains("hero-anim")) return; // reduced motion
+  if (!window.gsap || !window.SplitText) {
+    root.classList.remove("hero-anim"); // CDN failed: just show everything
+    return;
+  }
+  gsap.registerPlugin(SplitText);
+
+  const h1 = document.querySelector(".hero h1");
+  const media = document.querySelector(".hero-media");
+  const layers = media.querySelectorAll(".hero-layer");
+  const fontsReady = document.fonts ? document.fonts.ready : Promise.resolve();
+
+  // Split after Fraunces loads so line breaks match the final layout
+  fontsReady.then(() => {
+    const split = SplitText.create(h1, {
+      type: "lines, words",
+      linesClass: "hero-line",
+      mask: "lines",
+    });
+    const accentWords = split.words.filter((w) => w.closest(".accent"));
+    const plainWords = split.words.filter((w) => !w.closest(".accent"));
+
+    gsap.set(h1, { autoAlpha: 1 });
+
+    const tl = gsap.timeline({
+      defaults: { ease: "power3.out" },
+      onComplete: () => {
+        split.revert(); // restore plain text so it reflows on resize
+        initParallax();
+      },
+    });
+
+    tl.from(plainWords, { yPercent: 110, duration: 0.8, stagger: 0.07 })
+      .from(
+        accentWords,
+        { yPercent: 110, duration: 0.9, stagger: 0.09 },
+        "-=0.35",
+      )
+      .from(".hero-copy", { y: 18, autoAlpha: 0, duration: 0.7 }, "-=0.5")
+      .from(
+        ".hero-actions .btn",
+        { y: 14, autoAlpha: 0, duration: 0.6, stagger: 0.1 },
+        "-=0.45",
+      )
+      .from(
+        layers,
+        {
+          y: 48,
+          rotation: (i) => [-3, 3, -2][i],
+          autoAlpha: 0,
+          duration: 1,
+          stagger: 0.15,
+        },
+        0.25,
+      )
+      .from(".hero-media-cap", { y: 10, autoAlpha: 0, duration: 0.5 }, "-=0.4");
+  });
+
+  // Subtle mouse parallax on the stacked windows (desktop pointers only)
+  function initParallax() {
+    if (!matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+    const depths = [10, 18, 26];
+    const movers = [...layers].map((el) => ({
+      x: gsap.quickTo(el, "x", { duration: 0.8, ease: "power3.out" }),
+      y: gsap.quickTo(el, "y", { duration: 0.8, ease: "power3.out" }),
+    }));
+
+    media.addEventListener("pointermove", (e) => {
+      const r = media.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width - 0.5;
+      const py = (e.clientY - r.top) / r.height - 0.5;
+      movers.forEach((m, i) => {
+        m.x(px * depths[i]);
+        m.y(py * depths[i]);
+      });
+    });
+    media.addEventListener("pointerleave", () =>
+      movers.forEach((m) => {
+        m.x(0);
+        m.y(0);
+      }),
+    );
+  }
+})();
+
 const filters = document.querySelectorAll(".filter");
 const cards = document.querySelectorAll("#workGrid .card");
 filters.forEach((btn) => {
