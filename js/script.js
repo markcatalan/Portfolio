@@ -244,17 +244,21 @@ filters.forEach((btn) => {
         }),
     });
 
-    // Ease the grid height so the sections below don't jump
-    gsap.fromTo(
-      workGrid,
-      { height: startHeight },
-      {
-        height: endHeight,
-        duration: 0.6,
-        ease: "power3.inOut",
-        clearProps: "height",
-      },
-    );
+    // When the grid shrinks, ease it down so the sections below don't jump up.
+    // Uses min-height (not height) so the rows are never squeezed, which
+    // would shift the cards away from the positions Flip just measured.
+    if (endHeight < startHeight) {
+      gsap.fromTo(
+        workGrid,
+        { minHeight: startHeight },
+        {
+          minHeight: endHeight,
+          duration: 0.6,
+          ease: "power3.inOut",
+          onComplete: () => (workGrid.style.minHeight = ""),
+        },
+      );
+    }
   });
 });
 
